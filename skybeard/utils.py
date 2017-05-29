@@ -6,11 +6,15 @@ import inspect
 import shlex
 import logging
 import pip
+import subprocess
 import yaml
+import aiohttp
 
 import pyconfig
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.NOTSET)
+
 
 
 def is_module(path):
@@ -53,11 +57,23 @@ def get_beard_config(config_file="../../config.yml"):
     called.
 
     """
+
+    # Sometimes external libraries change the logging level. This is not
+    # acceptable, so we assert after importing a beard that it has not changed.
+    logger_level_before = logger.getEffectiveLevel()
+    logging.debug("logging level: {}".format(logger.getEffectiveLevel()))
+
     callers_frame = inspect.currentframe().f_back
     logger.debug("This function was called from the file: " +
                  callers_frame.f_code.co_filename)
     base_path = os.path.dirname(callers_frame.f_code.co_filename)
     config = yaml.safe_load(open(os.path.join(base_path, config_file)))
+
+    logging.debug("logging level: {}".format(logger.getEffectiveLevel()))
+    logger_level_after = logger.getEffectiveLevel()
+    assert logger_level_before == logger_level_after, \
+        "Something has changed the logger level!"
+
     return config
 
 
@@ -91,15 +107,19 @@ def setup_beard(beard_module_name,
     requirements_file = os.path.join(base_path, beard_requirements_file)
     if not pyconfig.get('no_auto_pip') and os.path.isfile(requirements_file):
         pip_args = [
+            'pip',
             'install',
             '-r',
-            requirements_file
+            # A little sanitising
+            # re.sub("[^a-z0-9./_-]", "", requirements_file)
+            "'{}'".format(requirements_file.replace("'", ""))
         ]
 
         if pyconfig.get('auto_pip_upgrade'):
             pip_args.append('--upgrade')
 
-        pip.main(pip_args)
+        # Using the library pip.main causes the logger level to change.
+        subprocess.check_call(" ".join(pip_args), shell=True)
         # Invalidate import path cache, since it's probably changed if new
         # requirements have been installed
         importlib.invalidate_caches()
@@ -114,8 +134,15 @@ def setup_beard(beard_module_name,
         # module is reloaded to ensure that if a module is found in
         # beard_python_path called beard_module_name, *that* module is loaded.
         mod = importlib.import_module(beard_module_name)
-        importlib.reload(mod)
+        # If it's a namespace module, then it hasn't yet imported the new
+        # module. Reload to get the new one.
+        if is_namespace_module(mod):
+            importlib.reload(mod)
 
+
+def is_namespace_module(mod):
+    """Check is the given module is a namespace module."""
+    return not hasattr(mod, '__file__')
 
 def get_literal_path(path_or_autoloader):
     """Gets literal path from AutoLoader or returns input."""
@@ -139,7 +166,7 @@ def all_possible_beards(paths):
     literal_paths = get_literal_beard_paths(paths)
 
     for path in literal_paths:
-        for f in os.listdir(path):
+        for f in (x for x in os.listdir(path) if not x.startswith(".")):
             if is_module(os.path.join(path, f)):
                 yield os.path.basename(f)
 
@@ -207,3 +234,18 @@ def partition_text(text):
                 j += 1
             except IndexError:
                 yield text_list[i]
+
+
+BOT_JSON = None
+
+
+async def getMe():
+    global BOT_JSON
+    if not BOT_JSON:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                    "https://api.telegram.org/bot{}/getMe".format(
+                        pyconfig.get('key'))) as resp:
+                BOT_JSON = (await resp.json())['result']
+
+    return BOT_JSON

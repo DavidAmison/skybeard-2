@@ -1,20 +1,34 @@
+import types
 import logging
 import re
 
 logger = logging.getLogger(__name__)
 
 
-def regex_predicate(pattern):
-    """Returns a predicate function which returns True if pattern is matched."""
+def regex_predicate(pattern, lower=False):
+    """Returns a predicate function which returns True if pattern is matched.
+        if lower == True, the text will be made lower case."""
+
+    if lower:
+        compiled_pattern = re.compile(pattern, re.IGNORECASE)
+    else:
+        compiled_pattern = re.compile(pattern)
+
     def retfunc(chat_handler, msg):
         try:
-            logging.debug("Matching regex: '{}' in '{}'".format(
-                pattern, msg['text']))
-            retmatch = re.match(pattern, msg['text'])
-            logging.debug("Match: {}".format(retmatch))
+            text = msg['text']
+            logger.debug("Matching regex: '{}' in '{}'".format(
+                pattern, text))
+            retmatch = compiled_pattern.match(text)
+            logger.debug("Match: {}".format(retmatch))
             return retmatch
         except KeyError:
             return False
+
+    def _toJSON(self):
+        return str(compiled_pattern)
+
+    retfunc.toJSON = types.MethodType(_toJSON, retfunc)
 
     return retfunc
 
@@ -24,15 +38,15 @@ def command_predicate(cmd):
     """Returns a predicate coroutine which returns True if command is sent."""
     async def retcoro(beard_chat_handler, msg):
         bot_username = await beard_chat_handler.get_username()
-        pattern = r"^/{}(?:@{}|[^@]|$)".format(
+        pattern = r"^/{}(?:@{}| |$)".format(
             cmd,
             bot_username,
         )
         try:
-            logging.debug("Matching regex: '{}' in '{}'".format(
+            logger.debug("Matching regex: '{}' in '{}'".format(
                 pattern, msg['text']))
             retmatch = re.match(pattern, msg['text'])
-            logging.debug("Match: {}".format(retmatch))
+            logger.debug("Match: {}".format(retmatch))
             return retmatch
         except KeyError:
             return False
