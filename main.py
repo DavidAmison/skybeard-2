@@ -48,8 +48,9 @@ def load_stache(stache_name, possible_dirs):
         path = Path(dir_).resolve()
         python_path = path.parent
         with PythonPathContext(str(python_path)):
-            module_spec = importlib.util.find_spec(
-                "{}.{}".format(str(find_last_child(path)), stache_name))
+            module_spec = importlib.util.spec_from_file_location(
+                    "{}.{}".format(str(find_last_child(path)), stache_name),
+                    "{}\{}.py".format(str(find_last_child(path)),stache_name))
 
             if module_spec:
                 foo = importlib.util.module_from_spec(module_spec)
@@ -116,6 +117,7 @@ def main():
     else:
         beards_to_load = pyconfig.get('beards')
 
+    
     for stache in pyconfig.get('staches'):
         load_stache(stache, pyconfig.get('stache_paths'))
 
