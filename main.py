@@ -48,9 +48,11 @@ def load_stache(stache_name, possible_dirs):
         path = Path(dir_).resolve()
         python_path = path.parent
         with PythonPathContext(str(python_path)):
+            stache_path = find_last_child(path) / stache_name
+            stache_module = "{}.{}".format(str(find_last_child(path)), stache_name)
             module_spec = importlib.util.spec_from_file_location(
-                    "{}.{}".format(str(find_last_child(path)), stache_name),
-                    "{}\{}.py".format(str(find_last_child(path)),stache_name))
+                    stache_module,
+                    "{}.py".format(stache_path))
 
             if module_spec:
                 foo = importlib.util.module_from_spec(module_spec)
